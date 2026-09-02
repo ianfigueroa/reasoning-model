@@ -78,12 +78,14 @@ def extract_answer(text):
     """Pull the model's final numeric answer.
 
     Prefer an explicit '#### N' (what we prompt for); otherwise fall back to the
-    last number in the text. Only look after the last '####' or 'answer' cue so a
-    number inside the reasoning doesn't get grabbed by mistake.
+    number after the first answer cue. Take the FIRST '####' — with greedy
+    decoding and no stop token the model can run on and fabricate extra
+    'Question/Answer' pairs, so the target question's answer is the first one,
+    not the last.
     """
     hits = re.findall(r"####\s*([-\d,\.]+)", text)
     if hits:
-        return _to_number(hits[-1])
+        return _to_number(hits[0])
     tail = re.split(r"(?i)the answer is|answer:", text)[-1]
     nums = re.findall(r"-?\d[\d,]*\.?\d*", tail)
     if not nums:

@@ -61,8 +61,11 @@ def main():
         else:
             ids = tok(prompt, return_tensors="pt").input_ids.to(model.device)
             with torch.no_grad():
+                # stop_strings halts the run-on: without it the model keeps
+                # emitting fake "Question:/Answer:" pairs past the real answer.
                 out = model.generate(ids, max_new_tokens=args.max_new_tokens,
-                                     do_sample=False, pad_token_id=tok.pad_token_id)
+                                     do_sample=False, pad_token_id=tok.pad_token_id,
+                                     stop_strings=["\nQuestion:", "\nQ:"], tokenizer=tok)
             text = tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
 
         pred, gold = extract_answer(text), extract_gold(ex["answer"])
