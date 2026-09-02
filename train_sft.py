@@ -53,13 +53,13 @@ def main():
 
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
     )
     tok = AutoTokenizer.from_pretrained(args.model)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, quantization_config=bnb, device_map="auto", dtype=torch.float16)
+        args.model, quantization_config=bnb, device_map="auto", dtype=torch.bfloat16)
 
     lora = LoraConfig(
         r=args.lora_r, lora_alpha=args.lora_r * 2, lora_dropout=0.05, bias="none",
@@ -73,7 +73,7 @@ def main():
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum, learning_rate=args.lr,
         max_length=args.max_seq_len, logging_steps=10, save_strategy="epoch",
-        bf16=False, fp16=True, gradient_checkpointing=True,
+        bf16=True, fp16=False, gradient_checkpointing=True,
         optim="paged_adamw_8bit", report_to="none", dataset_text_field="text",
     )
     trainer = SFTTrainer(model=model, args=cfg, train_dataset=ds,
