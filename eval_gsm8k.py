@@ -14,7 +14,7 @@ import time
 from datasets import load_dataset
 
 from common import (build_chat_prompt, build_prompt, extract_answer,
-                    extract_gold, load_model_4bit)
+                    extract_gold, load_model_4bit, majority_vote)
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
@@ -42,6 +42,8 @@ def main():
     ap.add_argument("--prompt", choices=["fewshot", "chat"], default="fewshot",
                     help="fewshot = 8-shot completion (base repro); "
                          "chat = zero-shot chat template + \\boxed{} (instruct/math models)")
+    ap.add_argument("--samples", type=int, default=1,
+                    help="self-consistency: sample N paths and majority-vote (1 = greedy)")
     args = ap.parse_args()
 
     force, cap = parse_budget(args.budget)
@@ -68,12 +70,25 @@ def main():
             with torch.no_grad():
                 # stop_strings halts the run-on: without it the model keeps
                 # emitting fake "Question:/Answer:" pairs past the real answer.
-                out = model.generate(ids, max_new_tokens=args.max_new_tokens,
-                                     do_sample=False, pad_token_id=tok.pad_token_id,
-                                     stop_strings=["\nQuestion:", "\nQ:"], tokenizer=tok)
-            text = tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True)
+                gen = dict(max_new_tokens=args.max_new_tokens,
+                           pad_token_id=tok.pad_token_id,
+                           stop_strings=["\nQuestion:", "\nQ:"], tokenizer=tok)
+                if args.samples > 1:
+                    # self-consistency: sample N paths in one batched call
+                    gen.update(do_sample=True, temperature=0.7, top_p=0.9,
+                               num_return_sequences=args.samples)
+                else:
+                    gen.update(do_sample=False)
+                out = model.generate(ids, **gen)
+            texts = [tok.decode(out[j, ids.shape[1]:], skip_special_tokens=True)
+                     for j in range(out.shape[0])]
+            text = texts[0]
 
-        pred, gold = extract_answer(text), extract_gold(ex["answer"])
+        gold = extract_gold(ex["answer"])
+        if force or cap is not None:
+            pred = extract_answer(text)
+        else:
+            pred = majority_vote([extract_answer(t) for t in texts])
         ok = pred is not None and pred == gold
         correct += ok
         rows.append({"pred": pred, "gold": gold, "ok": ok})
@@ -83,7 +98,8 @@ def main():
     acc = correct / len(ds)
     tag = _tag(args)
     result = {"tag": tag, "model": args.model, "adapter": args.adapter,
-              "budget": args.budget, "force": force, "n": len(ds),
+              "budget": args.budget, "force": force, "samples": args.samples,
+              "prompt": args.prompt, "n": len(ds),
               "accuracy": acc, "seconds": round(time.time() - t0, 1), "rows": rows}
     os.makedirs("outputs", exist_ok=True)
     path = f"outputs/eval_{tag}.json"
@@ -103,6 +119,8 @@ def _tag(args):
     tag = f"{base}_{b}"
     if args.prompt == "chat":
         tag += "_chat"
+    if args.samples > 1:
+        tag += f"_sc{args.samples}"
     return tag
 
 

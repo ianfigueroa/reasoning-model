@@ -116,6 +116,15 @@ def extract_answer(text):
     return _to_number(nums[-1])
 
 
+def majority_vote(preds):
+    """Self-consistency: most common non-None answer across sampled paths."""
+    from collections import Counter
+    valid = [p for p in preds if p is not None]
+    if not valid:
+        return None
+    return Counter(valid).most_common(1)[0][0]
+
+
 def _to_number(s):
     s = s.replace(",", "").rstrip(".")
     try:
