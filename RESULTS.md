@@ -15,6 +15,7 @@ across every row, so the numbers are comparable. Hardware: RTX 2070 8 GB, 4-bit
 | + s1 SFT, budget force:8 | greedy | 54% |
 | **Qwen2.5-Math-1.5B-Instruct** | zero-shot chat + `\boxed{}`, greedy | **87%** |
 | Qwen2.5-Math-1.5B-Instruct | + self-consistency (5 paths, vote) | 87% |
+| Qwen2.5-Math-1.5B-Instruct | + TIR (model writes & runs Python) | 83% |
 
 ![accuracy vs thinking budget](outputs/accuracy_vs_budget.png)
 
@@ -47,10 +48,21 @@ across every row, so the numbers are comparable. Hardware: RTX 2070 8 GB, 4-bit
   is *uncertain*; a confident math model has little to gain. The upside: two
   independent decoding methods agree, so 87% is robust.
 
-- **Next lever (not done):** tool-integrated reasoning (TIR) — letting the math
-  model write and run Python instead of doing mental arithmetic — is the model
-  card's higher-scoring mode and would target the remaining arithmetic-slip
-  misses. Left as a follow-up.
+- **TIR (tool-integrated reasoning) actually hurt a little: 83%.** Letting the
+  model write and run real Python (sandboxed subprocess, `tir.py`) was supposed
+  to kill arithmetic slips. It works mechanically — 0 of the 17 misses were
+  parse failures, all were genuine reasoning errors — but it lands *below* plain
+  chat CoT. The reason: GSM8K misses at this model size are mostly *conceptual*
+  (misreading the problem, e.g. setting up "increased by 150%" wrong), and TIR
+  fixes arithmetic, not comprehension. The published ~95% TIR numbers are for the
+  7B/72B math models; the effect doesn't carry down to 1.5B. Another honest
+  negative result, same theme as budget forcing.
+
+- **The pattern across this whole study:** at 1.5B scale, the fancy test-time
+  methods (s1 budget forcing, self-consistency, TIR) don't move the needle — the
+  only thing that did was picking the right base model and prompting it correctly.
+  The realistic path to ~95% is a bigger base model (Qwen2.5-Math-7B in 4-bit),
+  not a cleverer decode.
 
 ## Resume line
 
