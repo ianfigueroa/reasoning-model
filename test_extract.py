@@ -8,6 +8,14 @@ silently corrupts every accuracy number, so it's the one piece worth a test.
 from common import extract_answer, extract_gold
 
 
+def test_boxed():
+    # Math instruct models answer in \boxed{}; take the last box, parse the number.
+    assert extract_answer(r"reasoning ... \boxed{72}") == 72
+    assert extract_answer(r"step \boxed{18} then final \boxed{5}") == 5
+    assert extract_answer(r"\boxed{1,024}") == 1024
+    assert extract_answer(r"cost is \boxed{\$41}") == 41
+
+
 def test_gold():
     assert extract_gold("She sold 48+24 = 72 clips.\n#### 72") == 72
     assert extract_gold("...\n#### 1,024") == 1024

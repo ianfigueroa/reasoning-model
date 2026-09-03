@@ -57,6 +57,11 @@ FEWSHOT = [
 ]
 
 
+# Chain-of-thought system prompt used by the Qwen2.5-Math instruct models. They
+# are zero-shot with the chat template and put the final answer in \boxed{}.
+BOXED_SYS = "Please reason step by step, and put your final answer within \\boxed{}."
+
+
 def build_prompt(question):
     """8-shot CoT prompt ending on the target question."""
     parts = []
@@ -64,6 +69,17 @@ def build_prompt(question):
         parts.append(f"Question: {q}\nAnswer: {a}")
     parts.append(f"Question: {question}\nAnswer:")
     return "\n\n".join(parts)
+
+
+def build_chat_prompt(question, tok):
+    """Zero-shot chat-template prompt with the \\boxed{} CoT system prompt.
+
+    This is how the Qwen instruct/math models are meant to be used; feeding them
+    raw completion-style few-shot (build_prompt) leaves accuracy on the table.
+    """
+    msgs = [{"role": "system", "content": BOXED_SYS},
+            {"role": "user", "content": question}]
+    return tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
 
 
 def extract_gold(answer_field):
@@ -83,6 +99,13 @@ def extract_answer(text):
     'Question/Answer' pairs, so the target question's answer is the first one,
     not the last.
     """
+    # Math instruct models answer in \boxed{...}; take the LAST box (the final
+    # answer, after any intermediate boxed steps) and pull the number out of it.
+    boxes = re.findall(r"\\boxed\{([^}]*)\}", text)
+    if boxes:
+        nums = re.findall(r"-?\d[\d,]*\.?\d*", boxes[-1])
+        if nums:
+            return _to_number(nums[-1])
     hits = re.findall(r"####\s*([-\d,\.]+)", text)
     if hits:
         return _to_number(hits[0])
