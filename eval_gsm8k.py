@@ -13,7 +13,8 @@ import time
 
 from datasets import load_dataset
 
-from common import build_prompt, extract_answer, extract_gold, load_model_4bit
+from common import (build_chat_prompt, build_prompt, extract_answer,
+                    extract_gold, load_model_4bit)
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
@@ -38,6 +39,9 @@ def main():
     ap.add_argument("--n", type=int, default=200, help="how many test questions")
     ap.add_argument("--budget", default="none", help="none | force:N | cap:N")
     ap.add_argument("--max_new_tokens", type=int, default=1024)
+    ap.add_argument("--prompt", choices=["fewshot", "chat"], default="fewshot",
+                    help="fewshot = 8-shot completion (base repro); "
+                         "chat = zero-shot chat template + \\boxed{} (instruct/math models)")
     args = ap.parse_args()
 
     force, cap = parse_budget(args.budget)
@@ -54,7 +58,8 @@ def main():
     correct, rows = 0, []
     t0 = time.time()
     for i, ex in enumerate(ds):
-        prompt = build_prompt(ex["question"])
+        prompt = (build_chat_prompt(ex["question"], tok) if args.prompt == "chat"
+                  else build_prompt(ex["question"]))
         if force or cap is not None:
             text = generate_with_budget(model, tok, prompt, force=force, cap=cap,
                                         max_new_tokens=args.max_new_tokens)
@@ -90,7 +95,15 @@ def main():
 def _tag(args):
     base = "sft" if args.adapter else "base"
     b = args.budget.replace(":", "") if args.budget != "none" else "plain"
-    return f"{base}_{b}"
+    # Short model slug + prompt mode so different models/modes don't clobber each
+    # other's json (e.g. base_plain vs math_chat).
+    slug = args.model.rsplit("/", 1)[-1].lower()
+    if "math" in slug:
+        base = "math"
+    tag = f"{base}_{b}"
+    if args.prompt == "chat":
+        tag += "_chat"
+    return tag
 
 
 if __name__ == "__main__":
