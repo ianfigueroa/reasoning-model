@@ -5,7 +5,7 @@
 If this passes, the scoring half of the eval is trustworthy -- a wrong parser
 silently corrupts every accuracy number, so it's the one piece worth a test.
 """
-from common import extract_answer, extract_gold
+from common import extract_answer, extract_gold, majority_vote
 
 
 def test_boxed():
@@ -14,6 +14,13 @@ def test_boxed():
     assert extract_answer(r"step \boxed{18} then final \boxed{5}") == 5
     assert extract_answer(r"\boxed{1,024}") == 1024
     assert extract_answer(r"cost is \boxed{\$41}") == 41
+
+
+def test_majority_vote():
+    assert majority_vote([5, 5, 3, None, 5]) == 5   # ignores None, picks mode
+    assert majority_vote([1, 2, 2, 1, 2]) == 2
+    assert majority_vote([None, None]) is None
+    assert majority_vote([7]) == 7
 
 
 def test_gold():
