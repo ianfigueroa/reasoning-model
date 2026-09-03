@@ -39,11 +39,14 @@ def main():
     ap.add_argument("--n", type=int, default=200, help="how many test questions")
     ap.add_argument("--budget", default="none", help="none | force:N | cap:N")
     ap.add_argument("--max_new_tokens", type=int, default=1024)
-    ap.add_argument("--prompt", choices=["fewshot", "chat"], default="fewshot",
+    ap.add_argument("--prompt", choices=["fewshot", "chat", "tir"], default="fewshot",
                     help="fewshot = 8-shot completion (base repro); "
-                         "chat = zero-shot chat template + \\boxed{} (instruct/math models)")
+                         "chat = zero-shot chat template + \\boxed{} (instruct/math models); "
+                         "tir = tool-integrated reasoning, model runs Python (math models)")
     ap.add_argument("--samples", type=int, default=1,
                     help="self-consistency: sample N paths and majority-vote (1 = greedy)")
+    ap.add_argument("--tir_rounds", type=int, default=3,
+                    help="max code-execution rounds for --prompt tir")
     args = ap.parse_args()
 
     force, cap = parse_budget(args.budget)
@@ -56,39 +59,44 @@ def main():
         from budget_forcing import generate_with_budget
     else:
         import torch
+    if args.prompt == "tir":
+        from tir import generate_tir
 
     correct, rows = 0, []
     t0 = time.time()
     for i, ex in enumerate(ds):
-        prompt = (build_chat_prompt(ex["question"], tok) if args.prompt == "chat"
-                  else build_prompt(ex["question"]))
-        if force or cap is not None:
-            text = generate_with_budget(model, tok, prompt, force=force, cap=cap,
-                                        max_new_tokens=args.max_new_tokens)
+        if args.prompt == "tir":
+            # model writes + runs Python; texts stays a 1-list so scoring is uniform
+            texts = [generate_tir(model, tok, ex["question"],
+                                  max_new_tokens=args.max_new_tokens,
+                                  max_rounds=args.tir_rounds)]
         else:
-            ids = tok(prompt, return_tensors="pt").input_ids.to(model.device)
-            with torch.no_grad():
-                # stop_strings halts the run-on: without it the model keeps
-                # emitting fake "Question:/Answer:" pairs past the real answer.
-                gen = dict(max_new_tokens=args.max_new_tokens,
-                           pad_token_id=tok.pad_token_id,
-                           stop_strings=["\nQuestion:", "\nQ:"], tokenizer=tok)
-                if args.samples > 1:
-                    # self-consistency: sample N paths in one batched call
-                    gen.update(do_sample=True, temperature=0.7, top_p=0.9,
-                               num_return_sequences=args.samples)
-                else:
-                    gen.update(do_sample=False)
-                out = model.generate(ids, **gen)
-            texts = [tok.decode(out[j, ids.shape[1]:], skip_special_tokens=True)
-                     for j in range(out.shape[0])]
-            text = texts[0]
+            prompt = (build_chat_prompt(ex["question"], tok) if args.prompt == "chat"
+                      else build_prompt(ex["question"]))
+            if force or cap is not None:
+                texts = [generate_with_budget(model, tok, prompt, force=force, cap=cap,
+                                              max_new_tokens=args.max_new_tokens)]
+            else:
+                ids = tok(prompt, return_tensors="pt").input_ids.to(model.device)
+                with torch.no_grad():
+                    # stop_strings halts the run-on: without it the model keeps
+                    # emitting fake "Question:/Answer:" pairs past the real answer.
+                    gen = dict(max_new_tokens=args.max_new_tokens,
+                               pad_token_id=tok.pad_token_id,
+                               stop_strings=["\nQuestion:", "\nQ:"], tokenizer=tok)
+                    if args.samples > 1:
+                        # self-consistency: sample N paths in one batched call
+                        gen.update(do_sample=True, temperature=0.7, top_p=0.9,
+                                   num_return_sequences=args.samples)
+                    else:
+                        gen.update(do_sample=False)
+                    out = model.generate(ids, **gen)
+                texts = [tok.decode(out[j, ids.shape[1]:], skip_special_tokens=True)
+                         for j in range(out.shape[0])]
 
+        text = texts[0]
         gold = extract_gold(ex["answer"])
-        if force or cap is not None:
-            pred = extract_answer(text)
-        else:
-            pred = majority_vote([extract_answer(t) for t in texts])
+        pred = majority_vote([extract_answer(t) for t in texts])
         ok = pred is not None and pred == gold
         correct += ok
         rows.append({"pred": pred, "gold": gold, "ok": ok})
@@ -117,8 +125,8 @@ def _tag(args):
     if "math" in slug:
         base = "math"
     tag = f"{base}_{b}"
-    if args.prompt == "chat":
-        tag += "_chat"
+    if args.prompt in ("chat", "tir"):
+        tag += f"_{args.prompt}"
     if args.samples > 1:
         tag += f"_sc{args.samples}"
     return tag
