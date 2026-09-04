@@ -11,7 +11,7 @@ import re
 THINK_END = "</think>"
 
 # 8-shot chain-of-thought exemplars (the classic GSM8K CoT prompt). Few-shot so
-# the BASE model already reasons a little — otherwise the baseline is unfairly low
+# the BASE model already reasons a little - otherwise the baseline is unfairly low
 # and the SFT gain looks bigger than it really is.
 FEWSHOT = [
     ("Natalia sold clips to 48 friends in April, and then she sold half as many "
@@ -94,7 +94,7 @@ def extract_answer(text):
     """Pull the model's final numeric answer.
 
     Prefer an explicit '#### N' (what we prompt for); otherwise fall back to the
-    number after the first answer cue. Take the FIRST '####' — with greedy
+    number after the first answer cue. Take the FIRST '####' - with greedy
     decoding and no stop token the model can run on and fabricate extra
     'Question/Answer' pairs, so the target question's answer is the first one,
     not the last.

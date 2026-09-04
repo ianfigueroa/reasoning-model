@@ -36,10 +36,10 @@ adapter matrices (under 1% of the params). You only save the little adapter.
 lets a 1.5B model fit and train in 8 GB.
 
 **Budget forcing.** The inference-time lever, no retraining involved:
-- think longer (`force:N`) — when the model tries to close its thinking with
+- think longer (`force:N`) - when the model tries to close its thinking with
   `</think>`, drop that token and stick "Wait" on the end so it keeps going, up to N
   times. More thinking usually means more accuracy, up to a point.
-- think less (`cap:N`) — just cut the thinking off after N tokens. The control.
+- think less (`cap:N`) - just cut the thinking off after N tokens. The control.
 
 **GSM8K.** ~8k grade-school math word problems with a single numeric answer. The
 usual benchmark for whether a small model can actually reason.
