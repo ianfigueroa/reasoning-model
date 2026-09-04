@@ -1,8 +1,8 @@
 """GSM8K accuracy eval. One command per row of the results table:
 
-    base model            -> python eval_gsm8k.py --model Qwen/Qwen2.5-1.5B-Instruct --n 200
-    fine-tuned            -> python eval_gsm8k.py --adapter outputs/adapter --n 200
-    fine-tuned + budget   -> python eval_gsm8k.py --adapter outputs/adapter --budget force:4 --n 200
+    base model            -> python eval_gsm8k.py --model Qwen/Qwen2.5-1.5B-Instruct --n 100
+    fine-tuned            -> python eval_gsm8k.py --adapter outputs/adapter --n 100
+    fine-tuned + budget   -> python eval_gsm8k.py --adapter outputs/adapter --budget force:4 --n 100
 
 Writes outputs/eval_<tag>.json so plot_results.py can draw the curve.
 """

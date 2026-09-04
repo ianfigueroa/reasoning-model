@@ -8,8 +8,10 @@ think longer or shorter at inference time and plots what that does to accuracy.
 Everything runs on a single 8 GB GPU (RTX 2070) using 4-bit QLoRA. It's a small
 reproduction of the s1 "simple test-time scaling" paper.
 
-The point of the project is one number that goes up: GSM8K accuracy, base model vs.
-after fine-tuning vs. after fine-tuning + budget forcing.
+The question was whether GSM8K accuracy goes up: base model vs. after fine-tuning
+vs. after fine-tuning + budget forcing. At 1.5B it didn't (52-54% vs. a 53% base).
+What did help was switching to Qwen2.5-Math-1.5B-Instruct and prompting it the way
+it was trained: 87%. Full numbers in RESULTS.md.
 
 ## What the ideas mean
 
@@ -36,10 +38,10 @@ adapter matrices (under 1% of the params). You only save the little adapter.
 lets a 1.5B model fit and train in 8 GB.
 
 **Budget forcing.** The inference-time lever, no retraining involved:
-- think longer (`force:N`) — when the model tries to close its thinking with
+- think longer (`force:N`) - when the model tries to close its thinking with
   `</think>`, drop that token and stick "Wait" on the end so it keeps going, up to N
   times. More thinking usually means more accuracy, up to a point.
-- think less (`cap:N`) — just cut the thinking off after N tokens. The control.
+- think less (`cap:N`) - just cut the thinking off after N tokens. The control.
 
 **GSM8K.** ~8k grade-school math word problems with a single numeric answer. The
 usual benchmark for whether a small model can actually reason.
@@ -68,16 +70,21 @@ pip install -r requirements.txt
 python test_extract.py
 
 # baseline first
-python eval_gsm8k.py --model Qwen/Qwen2.5-1.5B-Instruct --n 200
+python eval_gsm8k.py --model Qwen/Qwen2.5-1.5B-Instruct --n 100
 
 # fine-tune (a couple hours on the 2070)
 python train_sft.py --model Qwen/Qwen2.5-1.5B-Instruct --max_samples 1000
 
 # re-eval with the adapter, then push the thinking budget up
-python eval_gsm8k.py --adapter outputs/adapter --n 200
-python eval_gsm8k.py --adapter outputs/adapter --budget force:2 --n 200
-python eval_gsm8k.py --adapter outputs/adapter --budget force:4 --n 200
-python eval_gsm8k.py --adapter outputs/adapter --budget force:8 --n 200
+python eval_gsm8k.py --adapter outputs/adapter --n 100
+python eval_gsm8k.py --adapter outputs/adapter --budget force:2 --n 100
+python eval_gsm8k.py --adapter outputs/adapter --budget force:4 --n 100
+python eval_gsm8k.py --adapter outputs/adapter --budget force:8 --n 100
+
+# the math model: zero-shot chat prompt, self-consistency, tool-integrated reasoning
+python eval_gsm8k.py --model Qwen/Qwen2.5-Math-1.5B-Instruct --prompt chat --n 100
+python eval_gsm8k.py --model Qwen/Qwen2.5-Math-1.5B-Instruct --prompt chat --samples 5 --n 100
+python eval_gsm8k.py --model Qwen/Qwen2.5-Math-1.5B-Instruct --prompt tir --n 100
 
 # draw the accuracy-vs-budget curve
 python plot_results.py
@@ -94,14 +101,16 @@ Each eval drops an `outputs/eval_<tag>.json`, and `plot_results.py` turns those 
 | `eval_gsm8k.py` | scores GSM8K accuracy (base, fine-tuned, or budget-forced) |
 | `train_sft.py` | QLoRA fine-tune on the s1K traces |
 | `budget_forcing.py` | the think-longer / think-less generation |
+| `tir.py` | tool-integrated reasoning: the model writes Python, it runs, the output goes back in |
 | `test_extract.py` | quick test for the answer parser |
 | `plot_results.py` | the accuracy-vs-budget plot |
 | `RESULTS.md` | the numbers |
 
 ## Scope
 
-The goal is a clean, honest gain (something like +5 to +15 points) with a writeup
-anyone can reproduce, not a state-of-the-art number. Test-time compute can't make up
+Everything was measured on the first 100 GSM8K test questions, so the standard error
+is about 5 points. Budget forcing and the s1 fine-tune didn't beat the base model at
+1.5B; the s1 paper showed the effect on a 32B model. Test-time compute can't make up
 for knowledge a model just doesn't have, which is why this stays at 1.5B and not
 smaller. RL-based reasoning (GRPO/PPO) would be the obvious next step but I left it
 out of the first version.
